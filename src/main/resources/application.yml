@@ -1,0 +1,93 @@
+server:
+  port: 8080
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+
+spring:
+  application:
+    name: travel-agent-guide
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:travel_agent}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:travelagent}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB:0}
+      timeout: 5s
+      lettuce:
+        pool:
+          max-active: 32
+          max-idle: 8
+          min-idle: 2
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:changeme}
+      base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+      chat:
+        options:
+          model: ${OPENAI_MODEL:gpt-4o-mini}
+          temperature: 0.3
+          max-tokens: 4096
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+travel:
+  agent:
+    name: "商旅智能助手"
+    max-react-iterations: 8
+    short-term-memory-max-messages: 40
+    long-term-top-k: 6
+    stream-timeout-ms: 120000
+    intent:
+      llm-fallback-enabled: true
+    rag:
+      vector-top-k: 5
+      keyword-top-k: 5
+      rerank-top-k: 8
+    models:
+      primary: ${OPENAI_MODEL:gpt-4o-mini}
+      fallback: ${OPENAI_FALLBACK_MODEL:gpt-4o-mini}
+    milvus:
+      host: ${MILVUS_HOST:localhost}
+      port: ${MILVUS_PORT:19530}
+      database: ${MILVUS_DATABASE:default}
+      collection: ${MILVUS_COLLECTION:travel_kb}
+      vector-dim: ${MILVUS_VECTOR_DIM:1536}
+      username: ${MILVUS_USER:}
+      password: ${MILVUS_PASSWORD:}
+    mcp:
+      enabled: ${MCP_ENABLED:false}
+      endpoint: ${MCP_ENDPOINT:http://localhost:8090/mcp}
+    circuit:
+      failure-threshold: 5
+      open-seconds: 30
+      half-open-max-tries: 3
+
+logging:
+  level:
+    com.travel.agent: INFO
+    org.springframework.ai: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
