@@ -1,4 +1,4 @@
-# travel-agent-guide（Java / Spring Boot 3）
+# travel-business-agent-guide（Java / Spring Boot 3）
 
 商旅 AI Agent 后端demo,涵盖：意图识别、ReAct 工具循环、多路 RAG 召回、Redis 短期记忆、Milvus 向量侧、OpenAI 兼容接口与 SSE 流式输出。
 
