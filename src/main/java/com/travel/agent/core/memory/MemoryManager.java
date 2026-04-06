@@ -46,11 +46,14 @@ public class MemoryManager {
     private void append(String sessionId, String role, String text) {
         String key = String.format(MSG_KEY, sessionId);
         try {
+            //存role、消息正文text、时间戳ts
             Map<String, Object> rec = new HashMap<>();
             rec.put("role", role);
             rec.put("text", text);
             rec.put("ts", Instant.now().toString());
+
             String json = objectMapper.writeValueAsString(rec);
+            //将消息rightPush 到 Redis List 尾部，只保留最近maxMessages 条，默认 40 条，48 小时过期
             stringRedisTemplate.opsForList().rightPush(key, json);
             stringRedisTemplate.opsForList().trim(key, -maxMessages, -1);
             stringRedisTemplate.expire(key, 48, TimeUnit.HOURS);
@@ -59,8 +62,10 @@ public class MemoryManager {
         }
     }
 
+    // 将短期记忆返回给模型
     public String formatShortTermForPrompt(String sessionId) {
         String key = String.format(MSG_KEY, sessionId);
+        //从 Redis 取最近 20 条消息
         List<String> raw = stringRedisTemplate.opsForList().range(key, -20, -1);
         if (raw == null || raw.isEmpty()) {
             return "(无)";
@@ -77,6 +82,7 @@ public class MemoryManager {
         return sb.toString();
     }
 
+    //取最近 10 条消息的 role，判断当前对话大概处于什么阶段，如：刚开场、收集需求……
     public List<String> getRecentRoles(String sessionId) {
         String key = String.format(MSG_KEY, sessionId);
         List<String> raw = stringRedisTemplate.opsForList().range(key, -10, -1);

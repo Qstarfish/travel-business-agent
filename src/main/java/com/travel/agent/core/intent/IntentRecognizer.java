@@ -33,6 +33,7 @@ public class IntentRecognizer {
             return IntentResult.builder().mode("general").confidence(0.5).source("empty").build();
         }
         String text = userInput.trim();
+        //先走 fastLane，如果置信度高，就直接返回
         IntentResult fast = fastLane(text);
         if (fast.getConfidence() >= 0.82) {
             return fast;
@@ -43,6 +44,7 @@ public class IntentRecognizer {
         return slowLane(text, fast);
     }
 
+    //fastLine做正则匹配
     private IntentResult fastLane(String text) {
         String lower = text.toLowerCase(Locale.ROOT);
         if (POLICY.matcher(text).matches()) {
@@ -60,6 +62,7 @@ public class IntentRecognizer {
         return IntentResult.builder().mode("general").confidence(0.45).source("rule_default").build();
     }
 
+    //
     private IntentResult slowLane(String text, IntentResult fastHint) {
         try {
             ChatClient client = chatClientBuilder.build();
@@ -68,8 +71,11 @@ public class IntentRecognizer {
                     booking=预订交通住宿；policy=差标政策合规；expense=报销发票；general=闲聊或其它；rag=需要查知识库的事实问答。
                     用户说：%s
                     """.formatted(text);
+
             String raw = client.prompt().user(prompt).call().content();
+            //做简单清洗
             String tag = raw.replaceAll("\\s+", " ").trim().toLowerCase(Locale.ROOT);
+            //做模糊映射
             String mode = mapTag(tag);
             return IntentResult.builder()
                     .mode(mode)
@@ -87,6 +93,7 @@ public class IntentRecognizer {
         }
     }
 
+    //模糊映射
     private String mapTag(String tag) {
         if (tag.contains("booking")) {
             return "booking";

@@ -65,14 +65,19 @@ public class ChatController {
             try {
                 agentOrchestrator.processMessageStream(request.getSessionId(), request.getMessage())
                         .publishOn(Schedulers.boundedElastic())
+                        //每来一个分片，就通过 SSE 发给前端
                         .doOnNext(chunk -> sendChunk(emitter, chunk))
+                        //出现错误
                         .doOnError(err -> {
+                            //先记日志
                             log.error("Stream error session={}", request.getSessionId(), err);
+                            //再给前端发一个 type=error 的错误块
                             sendChunk(emitter, StreamChunk.builder()
                                     .type("error")
                                     .content(err.getMessage() != null ? err.getMessage() : "stream error")
                                     .traceId(traceId)
                                     .build());
+                            //结束SSE
                             emitter.completeWithError(err);
                         })
                         .doOnComplete(emitter::complete)
@@ -90,10 +95,13 @@ public class ChatController {
                 }
                 emitter.completeWithError(e);
             } finally {
+                //清理 TraceContext，避免线程复用时把旧请求的 trace 信息污染到下一个任务。
                 TraceContext.clear();
             }
         });
+        //SSE 超时时打日志
         emitter.onTimeout(() -> log.warn("SSE timeout session={}", request.getSessionId()));
+        //SSE 完成时打日志
         emitter.onCompletion(() -> log.debug("SSE completed session={}", request.getSessionId()));
         return emitter;
     }

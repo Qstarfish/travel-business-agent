@@ -53,10 +53,12 @@ public class AgentOrchestrator {
             log.info("[{}] mode={} confidence={} source={} trace={}",
                     sessionId, mode, intent.getConfidence(), intent.getSource(), traceId);
 
+
             String effectiveMode = routeSubAgent(mode, userInput);
             PromptStateMachine.ConversationState state = promptStateMachine.resolveState(sessionId, userInput, effectiveMode);
             String systemPrompt = promptStateMachine.buildSystemPrompt(state, effectiveMode, agentName);
 
+            //检索外部记忆
             List<Map<String, String>> ragContext = multiChannelRetriever.retrieveParallel(sessionId, userInput, effectiveMode);
             String augmented = buildAugmentedContext(ragContext);
 
