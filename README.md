@@ -1,13 +1,13 @@
 # travel-business-agent-guide（Java / Spring Boot 3）
 
-商旅 AI Agent 后端demo,涵盖：意图识别、ReAct 工具循环、多路 RAG 召回、Redis 短期记忆、Milvus 向量侧、OpenAI 兼容接口与 SSE 流式输出。
+商旅 AI Agent 后端demo,涵盖：意图识别、ReAct 工具循环、多路 RAG 召回、Redis 短期记忆、PG vector 向量侧、OpenAI 兼容接口与 SSE 流式输出。
 
 ## 环境要求
 
 - JDK 17+
 - Maven 3.9+
 - MySQL 8、Redis 7（本地或 Docker）
-- Milvus 2.x（可选；未启动时向量通道自动降级）
+- PG vector 
 - OpenAI 兼容 API Key（`OPENAI_API_KEY`）
 
 ## 快速开始
@@ -20,7 +20,7 @@ export MYSQL_HOST=localhost
 export MYSQL_USER=root
 export MYSQL_PASSWORD=travelagent
 export REDIS_HOST=localhost
-export MILVUS_HOST=localhost
+
 ```
 
 2. 创建数据库（名称与 `application.yml` 中 `MYSQL_DATABASE` 一致，默认 `travel_agent`）：
@@ -72,12 +72,12 @@ docker compose up -d
 
 主要配置见 `src/main/resources/application.yml`：
 
-| 前缀 | 含义 |
-|------|------|
-| `spring.datasource.*` | MySQL |
-| `spring.data.redis.*` | Redis 会话记忆 |
-| `spring.ai.openai.*` | OpenAI 兼容 API |
-| `travel.agent.*` | Agent 行为、RAG、Milvus、MCP、熔断 |
+| 前缀 | 含义                            |
+|------|-------------------------------|
+| `spring.datasource.*` | MySQL                         |
+| `spring.data.redis.*` | Redis 会话记忆                    |
+| `spring.ai.openai.*` | OpenAI 兼容 API                 |
+| `travel.agent.*` | Agent 行为、RAG、PG vector、MCP、熔断 |
 
 ## 模块结构
 
@@ -89,4 +89,3 @@ docker compose up -d
 
 ## 许可证
 
-示例工程代码，按项目需要自行补充测试与合规审计。
