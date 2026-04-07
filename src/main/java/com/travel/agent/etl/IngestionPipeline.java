@@ -1,13 +1,9 @@
 package com.travel.agent.etl;
 
-import io.milvus.client.MilvusServiceClient;
-import io.milvus.param.ConnectParam;
-import io.milvus.param.R;
-import io.milvus.param.collection.HasCollectionParam;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
+import com.travel.agent.core.rag.PgVectorKnowledgeChunk;
+import com.travel.agent.core.rag.PgVectorKnowledgeRepository;
+import com.travel.agent.infrastructure.embedding.TextEmbeddingService;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -22,7 +18,7 @@ import java.util.UUID;
 import java.util.regex.Pattern;
 
 /**
- * 文档入库：清洗 → 分块 →（占位）向量化 → 写入 Milvus 集合。
+ * 文档入库：清洗 -> 分块 -> embedding -> 写入 PostgreSQL/pgvector。
  */
 @Slf4j
 @Service
@@ -30,73 +26,52 @@ public class IngestionPipeline {
 
     private static final Pattern WS = Pattern.compile("\\s+");
 
-    @Value("${travel.agent.milvus.host:localhost}")
-    private String milvusHost;
+    private final PgVectorKnowledgeRepository repository;
+    private final TextEmbeddingService embeddingService;
 
-    @Value("${travel.agent.milvus.port:19530}")
-    private int milvusPort;
-
-    @Value("${travel.agent.milvus.collection:travel_kb}")
-    private String collectionName;
-
-    private volatile MilvusServiceClient milvusClient;
-
-    @PostConstruct
-    public void init() {
-        try {
-            ConnectParam param = ConnectParam.newBuilder()
-                    .withHost(milvusHost)
-                    .withPort(milvusPort)
-                    .build();
-            milvusClient = new MilvusServiceClient(param);
-            log.info("IngestionPipeline Milvus connected {}:{}", milvusHost, milvusPort);
-        } catch (Exception e) {
-            log.warn("IngestionPipeline: Milvus not available: {}", e.getMessage());
-            milvusClient = null;
-        }
+    public IngestionPipeline(PgVectorKnowledgeRepository repository, TextEmbeddingService embeddingService) {
+        this.repository = repository;
+        this.embeddingService = embeddingService;
     }
 
-    @PreDestroy
-    public void shutdown() {
-        if (milvusClient != null) {
-            try {
-                milvusClient.close();
-            } catch (Exception ignored) {
-                // ignore
-            }
-        }
-    }
-
-    /**
-     * 处理原始文档：返回结构化块，若 Milvus 可用则检查集合存在性（真实 insert 需与 schema 对齐）。
-     */
     public IngestionResult ingestDocument(String title, String rawText, Map<String, String> metadata) {
         String normalized = normalize(rawText);
         List<TextChunk> chunks = chunkByLength(normalized, 512, 64);
         List<String> ids = new ArrayList<>();
-        for (TextChunk ch : chunks) {
-            ids.add(hashId(title, ch.text()));
-        }
-        boolean milvusReady = false;
-        if (milvusClient != null) {
-            try {
-                R<Boolean> resp = milvusClient.hasCollection(HasCollectionParam.newBuilder()
-                        .withCollectionName(collectionName)
-                        .build());
-                milvusReady = Boolean.TRUE.equals(resp.getData());
-            } catch (Exception e) {
-                log.debug("hasCollection: {}", e.getMessage());
+        boolean vectorStoreReady = repository.isAvailable();
+
+        if (vectorStoreReady) {
+            String docId = metadata == null ? hashId(title, normalized) : metadata.getOrDefault("docId", hashId(title, normalized));
+            String mode = metadata == null ? "general" : metadata.getOrDefault("mode", "general");
+            List<PgVectorKnowledgeChunk> rows = new ArrayList<>();
+            for (TextChunk ch : chunks) {
+                String chunkId = hashId(title, ch.text());
+                ids.add(chunkId);
+                rows.add(new PgVectorKnowledgeChunk(
+                        chunkId,
+                        docId,
+                        ch.index(),
+                        title,
+                        ch.text(),
+                        mode,
+                        metadata == null ? Map.of() : metadata,
+                        embeddingService.embed(ch.text())
+                ));
+            }
+            repository.saveAll(rows);
+        } else {
+            for (TextChunk ch : chunks) {
+                ids.add(hashId(title, ch.text()));
             }
         }
-        return new IngestionResult(title, chunks.size(), ids, milvusReady, metadata);
+        return new IngestionResult(title, chunks.size(), ids, vectorStoreReady, metadata);
     }
 
     private String normalize(String raw) {
         if (raw == null) {
             return "";
         }
-        String t = WS.matcher(raw.trim()).replaceAll(" ");
-        return t;
+        return WS.matcher(raw.trim()).replaceAll(" ");
     }
 
     private List<TextChunk> chunkByLength(String text, int maxChars, int overlap) {
@@ -109,8 +84,7 @@ public class IngestionPipeline {
         int idx = 0;
         while (start < n) {
             int end = Math.min(n, start + maxChars);
-            String slice = text.substring(start, end);
-            out.add(new TextChunk(idx++, slice));
+            out.add(new TextChunk(idx++, text.substring(start, end)));
             if (end >= n) {
                 break;
             }
@@ -122,10 +96,10 @@ public class IngestionPipeline {
     private String hashId(String title, String chunk) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
-            String s = title + "|" + chunk;
-            byte[] digest = md.digest(s.getBytes(StandardCharsets.UTF_8));
+            byte[] digest = md.digest((title + "|" + chunk).getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest).substring(0, 32);
         } catch (NoSuchAlgorithmException e) {
+            log.warn("hash id fallback: {}", e.getMessage());
             return UUID.randomUUID().toString().replace("-", "");
         }
     }
@@ -137,12 +111,12 @@ public class IngestionPipeline {
             String title,
             int chunkCount,
             List<String> chunkIds,
-            boolean milvusCollectionExists,
+            boolean vectorStoreReady,
             Map<String, String> metadata
     ) {
         public String summary() {
-            return String.format(Locale.ROOT, "ingested title=%s chunks=%d milvusOk=%s",
-                    title, chunkCount, milvusCollectionExists);
+            return String.format(Locale.ROOT, "ingested title=%s chunks=%d pgvectorOk=%s",
+                    title, chunkCount, vectorStoreReady);
         }
     }
 }

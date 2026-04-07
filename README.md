@@ -1,18 +1,27 @@
-# travel-agent-guide（Java / Spring Boot 3）
+# travel-agent-guide (Java / Spring Boot 3)
 
-商旅 AI Agent 后端demo,涵盖：意图识别、ReAct 工具循环、多路 RAG 召回、Redis 短期记忆、Milvus 向量侧、OpenAI 兼容接口与 SSE 流式输出。
+商旅 AI Agent 后端 demo，包含：
+
+- 意图识别
+- ReAct 工具调用循环
+- 多路 RAG 召回
+- Redis 短期会话记忆
+- PostgreSQL / pgvector 向量检索
+- OpenAI 兼容接口
+- SSE 流式输出
 
 ## 环境要求
 
 - JDK 17+
 - Maven 3.9+
-- MySQL 8、Redis 7（本地或 Docker）
-- Milvus 2.x（可选；未启动时向量通道自动降级）
-- OpenAI 兼容 API Key（`OPENAI_API_KEY`）
+- MySQL 8
+- Redis 7
+- PostgreSQL 16 + pgvector
+- OpenAI 兼容 API Key
 
 ## 快速开始
 
-1. 复制并编辑环境变量（可在 shell 或 IDE Run Configuration 中设置）：
+1. 配置环境变量
 
 ```bash
 export OPENAI_API_KEY=sk-...
@@ -20,29 +29,43 @@ export MYSQL_HOST=localhost
 export MYSQL_USER=root
 export MYSQL_PASSWORD=travelagent
 export REDIS_HOST=localhost
-export MILVUS_HOST=localhost
+export PGVECTOR_HOST=localhost
+export PGVECTOR_PORT=5432
+export PGVECTOR_DATABASE=travel_agent_vector
+export PGVECTOR_USER=postgres
+export PGVECTOR_PASSWORD=postgres
 ```
 
-2. 创建数据库（名称与 `application.yml` 中 `MYSQL_DATABASE` 一致，默认 `travel_agent`）：
+2. 初始化数据库
 
 ```sql
 CREATE DATABASE travel_agent DEFAULT CHARACTER SET utf8mb4;
 ```
 
-3. 编译并运行：
+PostgreSQL / pgvector 可执行：
+
+```sql
+CREATE DATABASE travel_agent_vector;
+\c travel_agent_vector
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+也可以直接使用 [`pgvector-init.sql`](D:/CodeWorkspace/travel-agent-guide-main/project-java/src/main/resources/sql/pgvector-init.sql)。
+
+3. 编译运行
 
 ```bash
 mvn clean package -DskipTests
 java -jar target/travel-agent-guide-1.0.0-SNAPSHOT.jar
 ```
 
-4. 健康检查：
+4. 健康检查
 
 ```bash
 curl -s http://localhost:8080/api/v1/health
 ```
 
-5. 非流式对话：
+5. 非流式对话
 
 ```bash
 curl -s -X POST http://localhost:8080/api/v1/chat \
@@ -50,7 +73,7 @@ curl -s -X POST http://localhost:8080/api/v1/chat \
   -d '{"sessionId":"demo-1","message":"帮我查一下一线城市酒店差标"}'
 ```
 
-6. SSE 流式（`text/event-stream`，超时 120s）：
+6. SSE 流式对话
 
 ```bash
 curl -N -X POST http://localhost:8080/api/v1/chat/stream \
@@ -66,27 +89,22 @@ curl -N -X POST http://localhost:8080/api/v1/chat/stream \
 docker compose up -d
 ```
 
-将启动 MySQL、Redis、Milvus（嵌入式单机镜像）及应用镜像（需先 `mvn package` 构建 jar 并由 Dockerfile 打包）。详见 `docker-compose.yml` 内注释。
+会启动 MySQL、Redis、PostgreSQL/pgvector 和应用服务。
 
-## 配置说明
+## 核心配置
 
-主要配置见 `src/main/resources/application.yml`：
+见 [`application.yml`](D:/CodeWorkspace/travel-agent-guide-main/project-java/src/main/resources/application.yml)：
 
-| 前缀 | 含义 |
-|------|------|
-| `spring.datasource.*` | MySQL |
-| `spring.data.redis.*` | Redis 会话记忆 |
-| `spring.ai.openai.*` | OpenAI 兼容 API |
-| `travel.agent.*` | Agent 行为、RAG、Milvus、MCP、熔断 |
+- `spring.datasource.*`：MySQL 业务库
+- `spring.data.redis.*`：Redis 会话记忆
+- `spring.ai.openai.*`：Chat + Embedding 模型
+- `travel.agent.pgvector.*`：pgvector 连接与向量维度
+- `travel.agent.rag.*`：检索 TopK 与重排配置
 
 ## 模块结构
 
 - `controller`：REST + SSE
-- `core`：编排、ReAct、意图、RAG、记忆、工具、提示词状态机
+- `core`：编排、ReAct、意图、RAG、记忆、工具、Prompt 状态机
 - `domain`：商旅领域模型
-- `infrastructure`：模型路由、熔断、追踪切面
-- `etl`：文档入库流水线
-
-## 许可证
-
-示例工程代码，按项目需要自行补充测试与合规审计。
+- `infrastructure`：模型路由、embedding、pgvector、链路追踪
+- `etl`：文档分块与向量入库

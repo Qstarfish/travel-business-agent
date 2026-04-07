@@ -34,6 +34,9 @@ spring:
           model: ${OPENAI_MODEL:gpt-4o-mini}
           temperature: 0.3
           max-tokens: 4096
+      embedding:
+        options:
+          model: ${OPENAI_EMBEDDING_MODEL:text-embedding-3-small}
 
 mybatis-plus:
   configuration:
@@ -62,14 +65,12 @@ travel:
     models:
       primary: ${OPENAI_MODEL:gpt-4o-mini}
       fallback: ${OPENAI_FALLBACK_MODEL:gpt-4o-mini}
-    milvus:
-      host: ${MILVUS_HOST:localhost}
-      port: ${MILVUS_PORT:19530}
-      database: ${MILVUS_DATABASE:default}
-      collection: ${MILVUS_COLLECTION:travel_kb}
-      vector-dim: ${MILVUS_VECTOR_DIM:1536}
-      username: ${MILVUS_USER:}
-      password: ${MILVUS_PASSWORD:}
+    pgvector:
+      enabled: ${PGVECTOR_ENABLED:true}
+      url: jdbc:postgresql://${PGVECTOR_HOST:localhost}:${PGVECTOR_PORT:5432}/${PGVECTOR_DATABASE:travel_agent_vector}
+      username: ${PGVECTOR_USER:postgres}
+      password: ${PGVECTOR_PASSWORD:postgres}
+      vector-dim: ${PGVECTOR_VECTOR_DIM:1536}
     mcp:
       enabled: ${MCP_ENABLED:false}
       endpoint: ${MCP_ENDPOINT:http://localhost:8090/mcp}
